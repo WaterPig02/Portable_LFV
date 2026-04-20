@@ -19,6 +19,7 @@ from asset_versioning import (
     ROI_METADATA_FILENAME,
     build_lut_asset_info,
     compute_export_signature,
+    normalize_roi_metadata,
     normalize_rectify_metadata,
 )
 from config import get_default_config
@@ -163,9 +164,9 @@ def load_rectification_metadata(rectify_dir):
 def load_roi_metadata(rectify_dir, roi_metadata_path=None):
     roi_path = Path(roi_metadata_path) if roi_metadata_path else Path(rectify_dir) / ROI_METADATA_FILENAME
     ensure(roi_path.exists(), f"missing ROI metadata: {roi_path}")
-    roi_metadata = load_json(roi_path)
-    ensure(roi_metadata.get("schema_version") == "release_roi_metadata_v1", "unsupported ROI metadata schema")
+    roi_metadata = normalize_roi_metadata(load_json(roi_path))
     ensure("common_valid_roi" in roi_metadata, "ROI metadata missing common_valid_roi")
+    ensure("safe_rect_roi" in roi_metadata, "ROI metadata missing safe_rect_roi")
     ensure("final_release_crop_16_9" in roi_metadata, "ROI metadata missing final_release_crop_16_9")
     ensure("roi_asset_version" in roi_metadata, "ROI metadata missing roi_asset_version")
     return roi_metadata
@@ -184,17 +185,28 @@ def validate_assets(profile, rectification_meta, roi_metadata, lut_path):
 
 def validate_crop_policy(roi_metadata):
     common_roi = roi_metadata["common_valid_roi"]
+    safe_rect_roi = roi_metadata.get("safe_rect_roi", common_roi)
     final_crop = roi_metadata["final_release_crop_16_9"]
     ensure(final_crop["width"] * 9 == final_crop["height"] * 16, "ROI metadata final crop is not exact 16:9")
-    ensure(final_crop["x"] >= common_roi["x"], "final crop lies outside common ROI")
-    ensure(final_crop["y"] >= common_roi["y"], "final crop lies outside common ROI")
+    ensure(safe_rect_roi["x"] >= common_roi["x"], "safe rect lies outside common ROI")
+    ensure(safe_rect_roi["y"] >= common_roi["y"], "safe rect lies outside common ROI")
     ensure(
-        final_crop["x"] + final_crop["width"] <= common_roi["x"] + common_roi["width"],
-        "final crop exceeds common ROI width",
+        safe_rect_roi["x"] + safe_rect_roi["width"] <= common_roi["x"] + common_roi["width"],
+        "safe rect exceeds common ROI width",
     )
     ensure(
-        final_crop["y"] + final_crop["height"] <= common_roi["y"] + common_roi["height"],
-        "final crop exceeds common ROI height",
+        safe_rect_roi["y"] + safe_rect_roi["height"] <= common_roi["y"] + common_roi["height"],
+        "safe rect exceeds common ROI height",
+    )
+    ensure(final_crop["x"] >= safe_rect_roi["x"], "final crop lies outside safe_rect_roi")
+    ensure(final_crop["y"] >= safe_rect_roi["y"], "final crop lies outside safe_rect_roi")
+    ensure(
+        final_crop["x"] + final_crop["width"] <= safe_rect_roi["x"] + safe_rect_roi["width"],
+        "final crop exceeds safe_rect_roi width",
+    )
+    ensure(
+        final_crop["y"] + final_crop["height"] <= safe_rect_roi["y"] + safe_rect_roi["height"],
+        "final crop exceeds safe_rect_roi height",
     )
 
 

@@ -2,12 +2,12 @@ from copy import deepcopy
 from pathlib import Path
 
 
-# 项目根目录。后续所有默认路径都从这里展开，避免在代码里散落绝对路径。
+# 项目根目录。所有默认路径都从这里展开，避免手写绝对路径时混淆批次。
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-# 默认处理第二批次。切到第一批次时只改 batch_name，不手工改一堆路径。
 DEFAULT_BATCH_NAME = "secondsyn"
-# 所有导出结果统一放在 Exports/<batch>/ 下。
-BATCH_EXPORT_ROOT = PROJECT_ROOT / "Exports"
+# BATCH_EXPORT_ROOT = PROJECT_ROOT / "Exports"
+BATCH_EXPORT_ROOT = Path(r"E:\5x5_LFV\LFV_Exports")
+
 
 BATCH_CONFIGS = {
     "secondsyn": {
@@ -34,17 +34,15 @@ BATCH_CONFIGS = {
     },
 }
 
+
 DEFAULT_CONFIG = {
     "environment": {
-        # 默认生产环境解释器。
         "python_executable": r"D:\anaconda3\envs\pytorch1\python.exe",
-        # LUT 处理当前仍依赖 ffmpeg。
         "ffmpeg_executable": "ffmpeg",
     },
     "paths": {
-        # 片段筛选文件，firstsyn/secondsyn 共用一个 time.json。
+        # time.json 仍然是两批次共用的片段清单。
         "time_json": str(PROJECT_ROOT / "Code" / "time.json"),
-        # 默认 LUT 资产路径。命令行传入时可覆盖。
         "lut_path": str(PROJECT_ROOT / "DJI OSMO Action 5 Pro D-Log M to Rec.709 V1.cube"),
     },
     "profiles": {
@@ -63,12 +61,22 @@ DEFAULT_CONFIG = {
         "batch_name": DEFAULT_BATCH_NAME,
         "default_scene": None,
         "reference_camera": "CAM_C3",
-        # camera 级并行默认 worker 数。
         "max_workers": 4,
-        # ffmpeg LUT 命令默认带 CUDA 标志；传参可改成 none。
         "ffmpeg_lut_hwaccel": "cuda",
-        # Ctrl+C 后等待 worker 自行退出的秒数，超时再强杀。
         "shutdown_timeout_sec": 5,
+        # ROI 生成与验证默认值。
+        "roi_generation_margin_px": 4,
+        "roi_validation_sample_scenes": ["0027", "0028", "0030"],
+        "roi_validation_frame_positions": ["start", "middle", "end"],
+        "roi_black_border_threshold": 0.01,
+        "roi_near_black_threshold": 0.03,
+        "roi_validation_fail_on_threshold_exceed": True,
+        # 导出后检查默认先抽 3 帧；可疑场景自动升级到 9 帧。
+        "export_validation_default_samples": 3,
+        "export_validation_upgraded_samples": 9,
+        "export_validation_black_border_fail_threshold": 0.01,
+        "export_validation_near_black_warning_threshold": 0.03,
+        "export_validation_enable_auto_upgrade": True,
     },
 }
 
@@ -78,11 +86,12 @@ def get_default_config(batch_name=None):
     selected_batch = batch_name or config["runtime"]["batch_name"]
     if selected_batch not in BATCH_CONFIGS:
         raise ValueError(f"unsupported batch_name: {selected_batch}")
+
     batch_config = deepcopy(BATCH_CONFIGS[selected_batch])
     config["runtime"]["batch_name"] = selected_batch
     config["paths"].update(batch_config.get("paths", {}))
     config["runtime"].update(batch_config.get("runtime", {}))
-    # 输出目录按批次隔离，避免 firstsyn / secondsyn 互相覆盖。
+
     batch_output_root = BATCH_EXPORT_ROOT / selected_batch
     config["paths"]["output_root"] = str(batch_output_root)
     config["paths"]["benchmark_output_root"] = str(batch_output_root / "benchmark")

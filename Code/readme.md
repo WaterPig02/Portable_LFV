@@ -174,20 +174,35 @@ Code/
 
 - `Code/export/validate_export.py`
 
+它支持两种模式：
+
+- 单场景检查：传 `--scene`
+- 整批次全量检查：不传 `--scene`
+
+抽样规则：
+
+- 默认每个 scene 先抽 `3` 帧
+- 若初检发现可疑信号，会自动升级到 `9` 帧复检
+- 9 帧位置按全片段均匀分布，保证可复现
+
 它会输出：
+
 - 中文检查日志
-- `check_report.json`
+- 每个 scene 的 `check_report.json`
+- 整批次汇总报告 `_batch_summary_<profile>.json`
 - 人工检查图目录
 
 自动检查内容：
-- 黑边 / 无效区域
+
+- 黑边 / 近黑边统计
 - 分辨率一致性
 - 帧数一致性
 - metadata 完整性
 - `.in_progress` 残留
-- 多视点极线垂直残差估计
+- 多视点极线垂直残差估计（仅辅助，不参与主阻塞判定）
 
 人工检查图包括：
+
 - 5x5 总拼图
 - 同一行拼图
 - 同一列拼图
@@ -230,9 +245,14 @@ D:\anaconda3\envs\pytorch1\python.exe Code\export\export_dataset.py --batch-name
 D:\anaconda3\envs\pytorch1\python.exe Code\export\export_dataset.py --batch-name secondsyn --profile benchmark --scene 0027 --max-workers 4
 ```
 
-### 导出后检查
+### 单场景导出后检查
 ```powershell
 D:\anaconda3\envs\pytorch1\python.exe Code\export\validate_export.py --batch-name secondsyn --profile benchmark --scene 0027
+```
+
+### 整批次全量检查
+```powershell
+D:\anaconda3\envs\pytorch1\python.exe Code\export\validate_export.py --batch-name secondsyn --profile benchmark
 ```
 
 ## 11. 发布前检查清单
@@ -251,6 +271,7 @@ D:\anaconda3\envs\pytorch1\python.exe Code\export\validate_export.py --batch-nam
 - 同一行拼图是否平滑
 - 同一列拼图是否平滑
 - 邻近视角与大视差视角是否存在明显极线漂移
+- 批次汇总报告中的 `warning / fail` scene 是否已逐个复查
 
 ## 12. 重跑说明
 同一 scene 重跑时，会写回同一个输出目录。

@@ -1,16 +1,11 @@
 import json
 from pathlib import Path
 
-from asset_versioning import (
-    CROP_POLICY_VERSION,
-    EXPORT_PIPELINE_VERSION,
-    REFERENCE_CAMERA,
-    ROI_POLICY_NAME,
-)
+from asset_versioning import CROP_POLICY_VERSION, EXPORT_PIPELINE_VERSION, REFERENCE_CAMERA, ROI_POLICY_NAME
 
 
 def camera_to_view_id(camera_id):
-    # 统一把 CAM_A1~CAM_E5 映射成稳定的 view_00~view_24。
+    # 将 CAM_A1~CAM_E5 映射为稳定的 view_00~view_24，保证发布目录顺序固定。
     suffix = camera_id.split("_", 1)[1]
     row = suffix[0]
     col = int(suffix[1:])
@@ -57,7 +52,6 @@ def build_sequence_metadata(
     segment_info,
     runtime_info=None,
 ):
-    # sequence metadata 只在一个 scene/segment 的 25 路视角都完成后写出。
     if REFERENCE_CAMERA not in phase_offsets:
         raise ValueError("reference camera missing from phase offsets")
     if float(phase_offsets[REFERENCE_CAMERA]) != 0.0:
@@ -77,13 +71,18 @@ def build_sequence_metadata(
         "bit_depth": profile["bit_depth"],
         "resize_target": resize_target,
         "final_output_resolution": final_output_resolution,
-        "roi_policy": ROI_POLICY_NAME,
+        "roi_policy": roi_metadata.get("roi_policy", ROI_POLICY_NAME),
+        "roi_policy_version": roi_metadata.get("roi_policy_version"),
         "common_valid_roi": roi_metadata["common_valid_roi"],
+        "common_valid_mask_bbox": roi_metadata.get("common_valid_mask_bbox"),
+        "safe_rect_roi": roi_metadata.get("safe_rect_roi", roi_metadata["common_valid_roi"]),
         "final_release_crop_16_9": roi_metadata["final_release_crop_16_9"],
         "crop_order": profile["crop_order"],
         "crop_policy_version": roi_metadata.get("crop_policy_version", CROP_POLICY_VERSION),
         "rectification_asset_version": rectification_meta["rectification_asset_version"],
         "roi_asset_version": roi_metadata["roi_asset_version"],
+        "roi_validation_status": roi_metadata.get("roi_validation_status"),
+        "roi_validation_summary": roi_metadata.get("roi_validation_summary"),
         "lut_asset_version": color_standardization["lut_asset_version"],
         "color_standardization": color_standardization,
         "phase_offset_ms": phase_offsets,
@@ -115,7 +114,6 @@ def build_view_metadata(
     segment_info,
     runtime_info=None,
 ):
-    # 每个 view 的 metadata 只在该视角完整成功后写出。
     payload = {
         "schema_version": "lfv_export_view_metadata_v1",
         "view_id": camera_to_view_id(camera_id),
