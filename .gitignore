@@ -29,3 +29,5 @@ Thumbs.db
 # Project data that should stay local
 Calibration_Data/
 Exports/
+Output/
+docs/

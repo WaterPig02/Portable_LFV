@@ -6,6 +6,11 @@
 - `benchmark`
 - `fidelity`
 
+当前状态：
+
+- 第二批次 `secondsyn` 的 `benchmark` 已经完成全量导出
+- 当前主要工作进入导出结果检查、问题场景复核与论文/数据集整理阶段
+
 统一处理顺序固定为：
 
 1. 读取同步后的 MP4
@@ -132,7 +137,23 @@ Code/
 - 保留裁剪后的原始分辨率
 - 应用 LUT
 
-## 7. 日志与终端进度
+## 7. 色彩与白平衡
+当前导出链只做一类颜色处理：
+
+- 通过 `ffmpeg` 的 `lut3d` 滤镜应用 `.cube` LUT
+- 当前 LUT 语义为 `D-Log M -> Rec.709`
+- `benchmark` 和 `fidelity` 都要求 LUT 存在
+
+当前导出链没有独立白平衡算法：
+
+- 不做自动白平衡
+- 不做灰卡估计
+- 不做逐相机白平衡匹配
+- 不做逐场景颜色校正
+
+因此，metadata 中记录的 `color_standardization` 只表示 LUT 标准化，不表示完成了白平衡修正。如果后续需要白平衡，应作为新的显式处理阶段加入，并写入 metadata。
+
+## 8. 日志与终端进度
 当前 exporter 会为每次运行生成一份中文日志。
 
 日志目录：
@@ -154,7 +175,7 @@ Code/
 - 异常提示
 - 中断清理信息
 
-## 8. Ctrl+C 与安全退出
+## 9. Ctrl+C 与安全退出
 如果你在 VSCode 终端中运行导出，按 `Ctrl+C` 时当前代码会：
 
 1. 停止继续提交新视角任务
@@ -169,7 +190,7 @@ Code/
 - 中断的 scene 不会写 sequence `metadata.json`
 - 建议清理该 scene 输出目录后再重跑
 
-## 9. 检查工具
+## 10. 检查工具
 新增导出检查工具：
 
 - `Code/export/validate_export.py`
@@ -224,7 +245,7 @@ Code/
 检查图输出目录：
 - `Exports/<batch>/checks/<scene>/`
 
-## 10. 常用命令
+## 11. 常用命令
 ### 生成 ROI metadata
 ```powershell
 D:\anaconda3\envs\pytorch1\python.exe Code\prepare\generate_release_roi.py --batch-name secondsyn
@@ -234,6 +255,8 @@ D:\anaconda3\envs\pytorch1\python.exe Code\prepare\generate_release_roi.py --bat
 ```powershell
 D:\anaconda3\envs\pytorch1\python.exe Code\export\export_dataset.py --batch-name secondsyn --profile benchmark
 ```
+
+第二批次 `secondsyn` 的 benchmark 已经完成全量导出。通常不需要重复全量运行，除非 ROI、LUT、导出配置或源视频发生变化。
 
 ### 跑 fidelity
 ```powershell
@@ -255,7 +278,7 @@ D:\anaconda3\envs\pytorch1\python.exe Code\export\validate_export.py --batch-nam
 D:\anaconda3\envs\pytorch1\python.exe Code\export\validate_export.py --batch-name secondsyn --profile benchmark
 ```
 
-## 11. 发布前检查清单
+## 12. 发布前检查清单
 至少检查以下内容：
 
 - `time.json` 片段是否正确
@@ -273,7 +296,7 @@ D:\anaconda3\envs\pytorch1\python.exe Code\export\validate_export.py --batch-nam
 - 邻近视角与大视差视角是否存在明显极线漂移
 - 批次汇总报告中的 `warning / fail` scene 是否已逐个复查
 
-## 12. 重跑说明
+## 13. 重跑说明
 同一 scene 重跑时，会写回同一个输出目录。
 
 这意味着：
