@@ -32,19 +32,22 @@ IN_PROGRESS_FILENAME = ".in_progress"
 
 
 def ensure(condition, message):
+    """断言运行条件；失败时抛出 RuntimeError. / Assert a runtime condition and raise RuntimeError on failure."""
     if not condition:
         raise RuntimeError(message)
 
 
 class RunLogger:
-    """同时写终端和日志文件的轻量中文日志器。"""
+    """同时写终端和日志文件的轻量日志器。 / Lightweight logger for console and file output."""
 
     def __init__(self, log_path):
+        """打开本次运行的日志文件。 / Open the log file for this run."""
         self.log_path = Path(log_path)
         self.log_path.parent.mkdir(parents=True, exist_ok=True)
         self.handle = self.log_path.open("a", encoding="utf-8")
 
     def _write(self, level, message):
+        """写一条带时间戳的日志。 / Write one timestamped log line."""
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         line = f"[{timestamp}] [{level}] {message}"
         print(line, flush=True)
@@ -52,24 +55,30 @@ class RunLogger:
         self.handle.flush()
 
     def info(self, message):
+        """写信息日志。 / Write an info log message."""
         self._write("信息", message)
 
     def warn(self, message):
+        """写警告日志。 / Write a warning log message."""
         self._write("警告", message)
 
     def error(self, message):
+        """写错误日志。 / Write an error log message."""
         self._write("错误", message)
 
     def close(self):
+        """关闭日志文件句柄。 / Close the log file handle."""
         self.handle.close()
 
 
 def load_json(path):
+    """读取 UTF-8 JSON 文件。 / Load a UTF-8 JSON file."""
     with Path(path).open("r", encoding="utf-8") as handle:
         return json.load(handle)
 
 
 def load_time_config(path, time_key):
+    """读取并规范化 time.json 中指定批次的导出片段。 / Load and normalize selected segments from time.json."""
     # time.json 只负责“同步后视频中哪些片段需要导出”，不参与同步或几何校正。
     raw = load_json(path)
     ensure(time_key in raw, f"time.json missing key: {time_key}")
@@ -96,18 +105,21 @@ def load_time_config(path, time_key):
 
 
 def resolve_optional_path(cli_value, config_value):
+    """解析可选路径，命令行参数优先。 / Resolve an optional path, preferring the CLI value."""
     if cli_value is not None:
         return cli_value
     return config_value
 
 
 def resolve_required_path(name, cli_value, config_value):
+    """解析必需路径，缺失时直接失败。 / Resolve a required path and fail if it is missing."""
     value = resolve_optional_path(cli_value, config_value)
     ensure(value is not None, f"missing required path: {name}")
     return value
 
 
 def resolve_output_root(cli_value, config_paths, profile_name):
+    """解析输出根目录，并判断是否使用 profile 根模式。 / Resolve output root and profile-root mode."""
     if cli_value is not None:
         return cli_value, False
 
@@ -122,6 +134,7 @@ def resolve_output_root(cli_value, config_paths, profile_name):
 
 
 def resolve_max_workers(cli_value, config_runtime):
+    """解析 camera worker 并发数。 / Resolve the number of parallel camera workers."""
     if cli_value is not None:
         ensure(cli_value > 0, "--max-workers must be greater than 0")
         return cli_value
@@ -131,6 +144,7 @@ def resolve_max_workers(cli_value, config_runtime):
 
 
 def resolve_lut_hwaccel(args, config_runtime):
+    """解析 ffmpeg LUT 的硬件加速设置。 / Resolve ffmpeg LUT hardware-acceleration mode."""
     if args.disable_gpu_lut:
         return "none"
     if args.lut_hwaccel is not None:
@@ -139,6 +153,7 @@ def resolve_lut_hwaccel(args, config_runtime):
 
 
 def load_rectification_metadata(rectify_dir):
+    """读取并兼容旧版 rectification metadata。 / Load rectification metadata with legacy compatibility."""
     rectify_meta_path = Path(rectify_dir) / "rectify_meta.json"
     ensure(rectify_meta_path.exists(), f"missing rectification metadata: {rectify_meta_path}")
     rectification_meta = normalize_rectify_metadata(load_json(rectify_meta_path))
@@ -162,6 +177,7 @@ def load_rectification_metadata(rectify_dir):
 
 
 def load_roi_metadata(rectify_dir, roi_metadata_path=None):
+    """读取并规范化 ROI metadata。 / Load and normalize ROI metadata."""
     roi_path = Path(roi_metadata_path) if roi_metadata_path else Path(rectify_dir) / ROI_METADATA_FILENAME
     ensure(roi_path.exists(), f"missing ROI metadata: {roi_path}")
     roi_metadata = normalize_roi_metadata(load_json(roi_path))
@@ -173,6 +189,7 @@ def load_roi_metadata(rectify_dir, roi_metadata_path=None):
 
 
 def validate_assets(profile, rectification_meta, roi_metadata, lut_path):
+    """校验 rectification、ROI 和 LUT 资产是否匹配。 / Validate rectification, ROI, and LUT assets."""
     ensure(rectification_meta["master_camera"] == REFERENCE_CAMERA, "reference camera mismatch in rectification metadata")
     ensure(
         roi_metadata["rectification_asset_version"] == rectification_meta["rectification_asset_version"],
@@ -184,6 +201,7 @@ def validate_assets(profile, rectification_meta, roi_metadata, lut_path):
 
 
 def validate_crop_policy(roi_metadata):
+    """校验 ROI 与最终 16:9 裁剪框的几何关系。 / Validate ROI and final 16:9 crop geometry."""
     common_roi = roi_metadata["common_valid_roi"]
     safe_rect_roi = roi_metadata.get("safe_rect_roi", common_roi)
     final_crop = roi_metadata["final_release_crop_16_9"]
@@ -211,21 +229,25 @@ def validate_crop_policy(roi_metadata):
 
 
 def validate_phase_offsets(offsets):
+    """校验同步 manifest 中的参考相机相位约束。 / Validate reference-camera phase offsets in the sync manifest."""
     ensure(REFERENCE_CAMERA in offsets, "reference camera missing from sync manifest")
     ensure(float(offsets[REFERENCE_CAMERA]["offset_ms"]) == 0.0, "CAM_C3 phase_offset_ms must be 0.0")
 
 
 def scene_id_from_video(video_name):
+    """从视频文件名提取 scene id。 / Extract the scene id from a video filename."""
     return Path(video_name).stem
 
 
 def build_segment_scene_name(scene_id, segment_index, segment_count):
+    """为多片段 scene 生成稳定输出名。 / Build a stable output name for multi-segment scenes."""
     if segment_count <= 1:
         return scene_id
     return f"{scene_id}_seg{segment_index + 1:02d}"
 
 
 def crop_frame(frame, roi):
+    """按 ROI 裁剪图像并防止空结果。 / Crop a frame by ROI and reject empty crops."""
     x = int(roi["x"])
     y = int(roi["y"])
     w = int(roi["width"])
@@ -236,6 +258,7 @@ def crop_frame(frame, roi):
 
 
 def convert_to_bit_depth(frame, bit_depth):
+    """转换输出位深。 / Convert frame data to the requested output bit depth."""
     if bit_depth == 8:
         if frame.dtype == np.uint8:
             return frame
@@ -252,11 +275,13 @@ def convert_to_bit_depth(frame, bit_depth):
 
 
 def escape_ffmpeg_filter_path(path):
+    """转义 LUT 路径，供 ffmpeg filter 参数使用。 / Escape a LUT path for ffmpeg filter syntax."""
     normalized = Path(path).resolve().as_posix()
     return normalized.replace("\\", "\\\\").replace(":", "\\:").replace("'", "\\'")
 
 
 def build_ffmpeg_lut_command(ffmpeg_executable, lut_path, width, height, hwaccel):
+    """构建单帧 rawvideo LUT 命令。 / Build the ffmpeg command for one rawvideo LUT pass."""
     # 当前 LUT 仍按“单帧 rawvideo -> ffmpeg -> rawvideo”执行，优先保证正确性。
     command = [ffmpeg_executable, "-hide_banner", "-loglevel", "error", "-y"]
     if hwaccel and hwaccel != "none":
@@ -284,6 +309,7 @@ def build_ffmpeg_lut_command(ffmpeg_executable, lut_path, width, height, hwaccel
 
 
 def apply_lut_with_ffmpeg(image_bgr, ffmpeg_executable, lut_path, hwaccel):
+    """通过 ffmpeg lut3d 对单帧应用 LUT。 / Apply the LUT to one frame through ffmpeg lut3d."""
     height, width = image_bgr.shape[:2]
     creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0) if os.name == "nt" else 0
     result = subprocess.run(
@@ -301,6 +327,7 @@ def apply_lut_with_ffmpeg(image_bgr, ffmpeg_executable, lut_path, hwaccel):
 
 
 def build_output_dir(output_root, profile_name, scene_id, camera_id, profile_root_mode):
+    """构建某个 camera/view 的输出目录。 / Build the output directory for one camera/view."""
     suffix = camera_id.split("_", 1)[1]
     row = suffix[0]
     col = int(suffix[1:])
@@ -312,6 +339,7 @@ def build_output_dir(output_root, profile_name, scene_id, camera_id, profile_roo
 
 
 def open_video(path):
+    """打开视频并在失败时明确报错。 / Open a video capture and fail clearly on error."""
     capture = cv2.VideoCapture(str(path))
     if not capture.isOpened():
         raise RuntimeError(f"failed to open video: {path}")
@@ -319,6 +347,7 @@ def open_video(path):
 
 
 def camera_worker_entry(task, result_queue, message_queue, stop_event):
+    """执行单个 camera 的完整导出任务。 / Run the full export task for one camera."""
     # 一个 worker 只负责一个 camera：读视频、校正、裁剪、套 LUT、写图、写 view metadata。
     capture = None
     output_dir = Path(task["output_dir"])
@@ -469,17 +498,23 @@ def camera_worker_entry(task, result_queue, message_queue, stop_event):
 
 
 class ShutdownManager:
+    """管理并清理 camera worker 进程。 / Track and clean up camera worker processes."""
+
     def __init__(self, timeout_sec):
+        """初始化清理超时时间。 / Initialize shutdown timeout."""
         self.timeout_sec = float(timeout_sec)
         self.processes = {}
 
     def register(self, camera_id, process):
+        """登记正在运行的 camera worker。 / Register an active camera worker."""
         self.processes[camera_id] = process
 
     def unregister(self, camera_id):
+        """移除已经结束的 camera worker。 / Remove a finished camera worker."""
         self.processes.pop(camera_id, None)
 
     def shutdown(self, stop_event):
+        """请求停止并强制清理残留进程。 / Request shutdown and force-clean remaining processes."""
         stop_event.set()
         deadline = time.time() + self.timeout_sec
         for process in list(self.processes.values()):
@@ -497,6 +532,7 @@ class ShutdownManager:
 
     @staticmethod
     def kill_process_tree(pid):
+        """按平台杀掉 worker 进程树。 / Kill a worker process tree by platform."""
         if pid is None:
             return
         if os.name == "nt":
@@ -509,6 +545,7 @@ class ShutdownManager:
 
 
 def drain_queue_items(raw_queue):
+    """尽量取空 multiprocessing queue 中的现有消息。 / Drain currently available queue items."""
     drained = []
     while True:
         try:
@@ -521,6 +558,7 @@ def drain_queue_items(raw_queue):
 
 
 def process_message_queue(message_queue, logger, progress_state):
+    """处理 worker 状态消息并更新进度日志。 / Process worker messages and update progress logs."""
     for message in drain_queue_items(message_queue):
         message_type = message.get("type")
         camera_id = message.get("camera_id", "unknown")
@@ -540,6 +578,7 @@ def process_message_queue(message_queue, logger, progress_state):
                 logger.error(message["traceback"])
 
 def run_camera_tasks(camera_tasks, max_workers, shutdown_timeout_sec, logger):
+    """并行调度 camera 任务并汇总结果。 / Run camera tasks in parallel and collect results."""
     # 主进程统一调度 camera 级并行，并负责在 Ctrl+C 时回收整棵子进程树。
     ctx = mp.get_context("spawn")
     stop_event = ctx.Event()
@@ -681,6 +720,7 @@ def build_camera_task(
     segment_info,
     max_workers,
 ):
+    """打包传给 worker 的单 camera 任务配置。 / Pack one camera task payload for a worker."""
     return {
         "camera_id": camera_id,
         "camera_meta": camera_meta,
@@ -705,6 +745,7 @@ def build_camera_task(
 
 
 def build_run_paths(output_root, batch_name, profile_name, scene_name):
+    """生成本次运行的 run id 与日志路径。 / Build run id and log paths for this export run."""
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     run_id = f"{timestamp}_{profile_name}_{scene_name}_{batch_name}"
     logs_dir = Path(output_root) / "logs"
@@ -717,6 +758,7 @@ def build_run_paths(output_root, batch_name, profile_name, scene_name):
 
 
 def verify_sequence_outputs(camera_tasks, sequence_output_root):
+    """写 sequence metadata 前检查 25 视角输出完整性。 / Verify per-view outputs before sequence metadata commit."""
     resolutions = []
     for task in camera_tasks:
         view_dir = Path(task["output_dir"])
@@ -729,6 +771,7 @@ def verify_sequence_outputs(camera_tasks, sequence_output_root):
 
 
 def main():
+    """命令行入口，组织批次导出流程。 / CLI entry point for batch export orchestration."""
     # 主入口：解析配置、组织 scene/segment/camera 任务，并负责最终提交 metadata。
     parser = argparse.ArgumentParser(description="Unified benchmark/fidelity exporter from synchronized MP4 clips.")
     parser.add_argument("--batch-name", default=None, choices=["secondsyn", "firstsyn"], help="Named batch config to use.")
