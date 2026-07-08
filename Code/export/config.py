@@ -13,7 +13,7 @@ BATCH_CONFIGS = {
     "secondsyn": {
         "paths": {
             "input_root": r"E:\5x5_LFV\2nd_synced_output",
-            "sync_manifest": str(PROJECT_ROOT / "Calibration_Data" / "sync_manifest_secondsyn.json"),
+            "sync_manifest": str(PROJECT_ROOT / "Calibration_Data" / "secondsyn" / "sync_manifest_secondsyn.json"),
             "rectify_dir": str(PROJECT_ROOT / "Output" / "Rectify_Maps" / "secondsyn"),
             "roi_metadata": str(PROJECT_ROOT / "Output" / "Rectify_Maps" / "secondsyn" / "release_roi_metadata.json"),
         },
@@ -23,8 +23,8 @@ BATCH_CONFIGS = {
     },
     "firstsyn": {
         "paths": {
-            "input_root": None,
-            "sync_manifest": str(PROJECT_ROOT / "Calibration_Data" / "sync_manifest_firstsyn.json"),
+            "input_root": r"E:\5x5_LFV\1st_synced_output",
+            "sync_manifest": str(PROJECT_ROOT / "Calibration_Data" / "firstsyn" / "sync_manifest_firstsyn.json"),
             "rectify_dir": str(PROJECT_ROOT / "Output" / "Rectify_Maps" / "firstsyn"),
             "roi_metadata": str(PROJECT_ROOT / "Output" / "Rectify_Maps" / "firstsyn" / "release_roi_metadata.json"),
         },

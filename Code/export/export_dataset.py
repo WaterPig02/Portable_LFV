@@ -770,6 +770,33 @@ def verify_sequence_outputs(camera_tasks, sequence_output_root):
     ensure(not (sequence_output_root / "metadata.json").exists(), "sequence metadata 写出前发现旧 metadata，请先清理后重跑")
 
 
+def is_completed_sequence(camera_tasks, sequence_output_root):
+    """判断一个 scene 是否已经完整导出。 / Check whether one scene has already been fully exported."""
+    metadata_path = Path(sequence_output_root) / "metadata.json"
+    if not metadata_path.exists():
+        return False
+    for task in camera_tasks:
+        view_dir = Path(task["output_dir"])
+        if (view_dir / IN_PROGRESS_FILENAME).exists():
+            return False
+        if not (view_dir / "view_metadata.json").exists():
+            return False
+        if not any(path.suffix.lower() in {".jpg", ".png"} for path in view_dir.iterdir()):
+            return False
+    return True
+
+
+def has_partial_sequence_outputs(camera_tasks, sequence_output_root):
+    """判断 scene 目录里是否已有半成品输出。 / Check whether a scene has partial existing outputs."""
+    if (Path(sequence_output_root) / "metadata.json").exists():
+        return True
+    for task in camera_tasks:
+        view_dir = Path(task["output_dir"])
+        if view_dir.exists() and any(view_dir.iterdir()):
+            return True
+    return False
+
+
 def main():
     """命令行入口，组织批次导出流程。 / CLI entry point for batch export orchestration."""
     # 主入口：解析配置、组织 scene/segment/camera 任务，并负责最终提交 metadata。
@@ -905,6 +932,14 @@ def main():
                             max_workers=max_workers_value,
                         )
                     )
+
+                if is_completed_sequence(camera_tasks, sequence_output_root):
+                    logger.info(f"场景 {export_scene_id} 已完整导出，跳过以避免重复覆盖。")
+                    continue
+                ensure(
+                    not has_partial_sequence_outputs(camera_tasks, sequence_output_root),
+                    f"场景 {export_scene_id} 已存在不完整输出，请先清理目录后重跑：{sequence_output_root}",
+                )
 
                 results = run_camera_tasks(
                     camera_tasks=camera_tasks,

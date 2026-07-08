@@ -69,6 +69,46 @@ def sample_frame_indices(frame_count, sample_count):
     return sorted({int(round(value)) for value in positions})
 
 
+def longest_true_run(mask):
+    current = 0
+    longest = 0
+    for value in mask:
+        if bool(value):
+            current += 1
+            longest = max(longest, current)
+        else:
+            current = 0
+    return int(longest)
+
+
+def edge_strip_stats(image, edge_name, threshold, band_px=8, full_line_ratio=0.80):
+    if edge_name == "top":
+        strip = image[:band_px, :, :]
+        line_axis = 1
+    elif edge_name == "bottom":
+        strip = image[-band_px:, :, :]
+        line_axis = 1
+    elif edge_name == "left":
+        strip = image[:, :band_px, :]
+        line_axis = 0
+    elif edge_name == "right":
+        strip = image[:, -band_px:, :]
+        line_axis = 0
+    else:
+        raise ValueError(f"unsupported edge: {edge_name}")
+
+    mask = np.all(strip <= threshold, axis=2)
+    line_black_ratio = np.mean(mask, axis=line_axis)
+    full_line_mask = line_black_ratio >= full_line_ratio
+    return {
+        "band_px": int(band_px),
+        "full_line_ratio_threshold": float(full_line_ratio),
+        "max_line_black_ratio": float(np.max(line_black_ratio)) if line_black_ratio.size else 0.0,
+        "full_line_count": int(np.sum(full_line_mask)),
+        "longest_full_line_run_px": longest_true_run(full_line_mask),
+    }
+
+
 def compute_border_stats(image, black_threshold=2, near_black_threshold=8):
     edges = {
         "top": image[0],
@@ -87,12 +127,18 @@ def compute_border_stats(image, black_threshold=2, near_black_threshold=8):
         per_edge[edge_name] = {
             "black_ratio": black_ratio,
             "near_black_ratio": near_black_ratio,
+            "black_strip": edge_strip_stats(image, edge_name, black_threshold),
+            "near_black_strip": edge_strip_stats(image, edge_name, near_black_threshold),
         }
         black_ratios.append(black_ratio)
         near_black_ratios.append(near_black_ratio)
+    blocking_black_border = any(edge["black_strip"]["longest_full_line_run_px"] >= 3 for edge in per_edge.values())
+    near_black_border_warning = any(edge["near_black_strip"]["longest_full_line_run_px"] >= 3 for edge in per_edge.values())
     return {
         "overall_black_ratio": float(np.mean(black_ratios)),
         "overall_near_black_ratio": float(np.mean(near_black_ratios)),
+        "blocking_black_border": bool(blocking_black_border),
+        "near_black_border_warning": bool(near_black_border_warning),
         "per_edge": per_edge,
     }
 
@@ -173,9 +219,19 @@ def rank_worst_cameras(view_reports):
                     "frame_name": sample["frame_name"],
                     "overall_black_ratio": sample["border_stats"]["overall_black_ratio"],
                     "overall_near_black_ratio": sample["border_stats"]["overall_near_black_ratio"],
+                    "blocking_black_border": sample["border_stats"].get("blocking_black_border", False),
+                    "near_black_border_warning": sample["border_stats"].get("near_black_border_warning", False),
                 }
             )
-    ranked.sort(key=lambda item: (item["overall_black_ratio"], item["overall_near_black_ratio"]), reverse=True)
+    ranked.sort(
+        key=lambda item: (
+            item["blocking_black_border"],
+            item["near_black_border_warning"],
+            item["overall_black_ratio"],
+            item["overall_near_black_ratio"],
+        ),
+        reverse=True,
+    )
     return ranked[:10]
 
 
@@ -288,18 +344,18 @@ def detect_border_suspicious_reasons(view_reports, black_fail_threshold, near_bl
     for camera_id, payload in view_reports.items():
         for sample in payload["border_stats_samples"]:
             stats = sample["border_stats"]
-            if stats["overall_black_ratio"] > black_fail_threshold:
-                reasons.append(
-                    f"{camera_id}/{sample['frame_name']} 的 overall_black_ratio={stats['overall_black_ratio']:.6f} 超过阈值 {black_fail_threshold:.6f}"
-                )
+            if stats.get("blocking_black_border", False):
+                reasons.append(f"{camera_id}/{sample['frame_name']} 检测到连续整边黑色无效带")
+            elif stats.get("near_black_border_warning", False):
+                reasons.append(f"{camera_id}/{sample['frame_name']} 检测到连续近黑整边，建议复查")
             elif stats["overall_near_black_ratio"] > near_black_warning_threshold:
                 reasons.append(
                     f"{camera_id}/{sample['frame_name']} 的 overall_near_black_ratio={stats['overall_near_black_ratio']:.6f} 超过阈值 {near_black_warning_threshold:.6f}"
                 )
             for edge_name, edge_payload in stats["per_edge"].items():
-                if edge_payload["black_ratio"] > black_fail_threshold:
+                if edge_payload["black_strip"]["longest_full_line_run_px"] >= 3:
                     reasons.append(
-                    f"{camera_id}/{sample['frame_name']} 的 {edge_name} 边 black_ratio={edge_payload['black_ratio']:.6f} 超过阈值 {black_fail_threshold:.6f}"
+                        f"{camera_id}/{sample['frame_name']} 的 {edge_name} 边存在连续 {edge_payload['black_strip']['longest_full_line_run_px']}px 整边黑色无效带"
                     )
         if len(reasons) >= 20:
             break
@@ -338,10 +394,10 @@ def classify_scene(
     for payload in structure_report["view_reports"].values():
         for sample in payload["border_stats_samples"]:
             stats = sample["border_stats"]
-            if stats["overall_black_ratio"] > black_fail_threshold:
+            if stats.get("blocking_black_border", False):
                 has_black_fail = True
                 break
-            if stats["overall_near_black_ratio"] > near_black_warning_threshold:
+            if stats.get("near_black_border_warning", False) or stats["overall_near_black_ratio"] > near_black_warning_threshold:
                 has_warning = True
         if has_black_fail:
             break
