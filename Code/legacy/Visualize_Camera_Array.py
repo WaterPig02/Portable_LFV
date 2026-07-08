@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 
 # ================= 配置路径 =================
-JSON_PATH = r"D:\Project\LF_dataset\Calibration\Output\calibration_raw_stereo_locked.json"
+JSON_PATH = r"D:\Project\LF_dataset\Calibration\Output\calibration_raw_stereo_locked_secondsyn.json"
 # ===========================================
 
 def plot_array():
