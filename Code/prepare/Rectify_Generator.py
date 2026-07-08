@@ -3,9 +3,18 @@ import numpy as np
 import json
 import os
 import hashlib
+import argparse
+import sys
+from pathlib import Path
+
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+SCRIPTS_DIR = PROJECT_ROOT / "scripts"
+if str(SCRIPTS_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPTS_DIR))
+from pipeline_config import config_value, load_pipeline_config
 
 # ================= 配置区域 =================
-BATCH_NAME = "secondsyn"
+BATCH_NAME = "firstsyn"
 INPUT_JSON = rf"D:\Project\LF_dataset\Calibration\Output\calibration_raw_stereo_locked_{BATCH_NAME}.json"
 OUTPUT_MAP_DIR = rf"D:\Project\LF_dataset\Calibration\Output\Rectify_Maps\{BATCH_NAME}"
 MASTER_CAM = "CAM_C3"
@@ -28,6 +37,49 @@ def compute_rectification_asset_version(raw_calib):
     raw_bytes = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
     return hashlib.sha256(raw_bytes).hexdigest()[:16]
 
+def parse_args():
+    parser = argparse.ArgumentParser(description="Generate RealDynLFV rectification maps.")
+    parser.add_argument("--config", default=None, help="Optional RealDynLFV batch YAML config.")
+    parser.add_argument("--batch-name", default=None)
+    parser.add_argument("--calibration-json", default=None)
+    parser.add_argument("--output-dir", default=None)
+    parser.add_argument("--reference-camera", default=None)
+    parser.add_argument("--image-width", type=int, default=None)
+    parser.add_argument("--image-height", type=int, default=None)
+    parser.add_argument("--crop-alpha", type=float, default=None)
+    return parser.parse_args()
+
+
+def apply_runtime_config(args):
+    """Apply CLI/config overrides while preserving the existing map algorithm."""
+    global BATCH_NAME, INPUT_JSON, OUTPUT_MAP_DIR, MASTER_CAM, IMG_W, IMG_H, CROP_ALPHA
+    config = load_pipeline_config(args.config) if args.config else {}
+    image_size = config_value(config, "camera", "image_size", default=[IMG_W, IMG_H])
+    BATCH_NAME = args.batch_name or str(config_value(config, "batch_name", default=BATCH_NAME))
+    INPUT_JSON = args.calibration_json or config_value(
+        config, "paths", "calibration_json",
+        default=rf"D:\Project\LF_dataset\Calibration\Output\calibration_raw_stereo_locked_{BATCH_NAME}.json",
+    )
+    OUTPUT_MAP_DIR = args.output_dir or config_value(
+        config, "paths", "rectification_dir",
+        default=rf"D:\Project\LF_dataset\Calibration\Output\Rectify_Maps\{BATCH_NAME}",
+    )
+    MASTER_CAM = args.reference_camera or str(config_value(config, "camera", "reference", default=MASTER_CAM))
+    IMG_W = args.image_width if args.image_width is not None else int(image_size[0])
+    IMG_H = args.image_height if args.image_height is not None else int(image_size[1])
+    CROP_ALPHA = args.crop_alpha if args.crop_alpha is not None else float(config_value(config, "rectification", "crop_alpha", default=CROP_ALPHA))
+
+
+def preflight(raw_calib):
+    if MASTER_CAM != "CAM_C3":
+        raise RuntimeError(f"reference camera must be CAM_C3, got {MASTER_CAM}")
+    expected = {f"CAM_{row}{col}" for row in "ABCDE" for col in range(1, 6)}
+    if set(raw_calib) != expected:
+        raise RuntimeError(f"calibration JSON must contain CAM_A1..CAM_E5, got {len(raw_calib)} cameras")
+    if IMG_W <= 0 or IMG_H <= 0:
+        raise ValueError(f"invalid image size: {IMG_W}x{IMG_H}")
+
+
 def main():
     if not os.path.exists(INPUT_JSON):
         print(f"错误：找不到文件 {INPUT_JSON}")
@@ -35,6 +87,8 @@ def main():
 
     with open(INPUT_JSON, 'r') as f:
         raw_calib = json.load(f)
+
+    preflight(raw_calib)
 
     os.makedirs(OUTPUT_MAP_DIR, exist_ok=True)
     rectification_asset_version = compute_rectification_asset_version(raw_calib)
@@ -120,4 +174,5 @@ def main():
     print(f"\n全阵列校正映射表已更新。请运行 Apply_Rectification 查看效果。")
 
 if __name__ == "__main__":
+    apply_runtime_config(parse_args())
     main()

@@ -2,15 +2,28 @@ import json
 import os
 import subprocess
 import multiprocessing
+import argparse
+import sys
 from pathlib import Path
 
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+SCRIPTS_DIR = PROJECT_ROOT / "scripts"
+if str(SCRIPTS_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPTS_DIR))
+from pipeline_config import config_value, load_pipeline_config
+
 # ================= 配置区域 =================
-DATA_ROOT = r"E:\5x5_LFV\2026-01-22_第二次拍摄户外场景"
-OUTPUT_ROOT = r"E:\5x5_LFV\2nd_synced_output"
-JSON_FILE = r"E:\5x5_LFV\2026-01-22_第二次拍摄户外场景\sync_manifest.json"
+DATA_ROOT = r"D:\Project\LF_dataset\Data\01_Original_Data\2026-01-19_数据集第一批次拍摄"
+OUTPUT_ROOT = r"E:\5x5_LFV\1st_synced_output"
+JSON_FILE = r"D:\Project\LF_dataset\Calibration\Calibration_Data\firstsyn\sync_manifest_firstsyn.json"
 
 # 剪辑设置
 START_DELAY = 1.5    # 打板后延迟几秒开始剪 (避开手部动作)
+FPS_NOMINAL = 59.94
+NUM_WORKERS = 4
+FFMPEG_EXECUTABLE = "ffmpeg"
+FFPROBE_EXECUTABLE = "ffprobe"
+SCENE_FILTER = None
 # 注意：CLIP_DURATION 被移除了，现在由脚本自动计算最大时长
 # ===========================================
 
@@ -18,7 +31,7 @@ def get_video_duration(file_path):
     """使用 ffprobe 获取视频总时长(秒)"""
     try:
         cmd = [
-            'ffprobe', '-v', 'error',
+            FFPROBE_EXECUTABLE, '-v', 'error',
             '-show_entries', 'format=duration',
             '-of', 'default=noprint_wrappers=1:nokey=1',
             str(file_path)
@@ -38,7 +51,7 @@ def process_single_video(args):
     if not os.path.exists(src_path): return f"[Skip] {cam} 不存在"
     
     # 1. 计算精确剪辑点
-    FPS = 59.94 
+    FPS = FPS_NOMINAL
     FRAME_INTERVAL = 1.0 / FPS
     theoretical_start_time = master_clap_time + (offset_data['offset_ms'] / 1000.0) + START_DELAY
     
@@ -54,7 +67,7 @@ def process_single_video(args):
     
     # 3. FFmpeg GPU 加速指令
     cmd = [
-        'ffmpeg', '-y',
+        FFMPEG_EXECUTABLE, '-y',
         '-hwaccel', 'cuda',             # 硬件加速解码
         # '-hwaccel_output_format', 'cuda',
         '-ss', f"{actual_cut_time:.6f}", # 放在 -i 前是快速定位，放在后是精确对齐
@@ -97,6 +110,47 @@ def process_single_video(args):
     except subprocess.CalledProcessError as e:
         return f"[Error] {cam}: {e.stderr.decode()}"
 
+def apply_runtime_config(args):
+    """Apply CLI/config overrides while preserving the original constants as defaults."""
+    global DATA_ROOT, OUTPUT_ROOT, JSON_FILE, START_DELAY, FPS_NOMINAL
+    global NUM_WORKERS, FFMPEG_EXECUTABLE, FFPROBE_EXECUTABLE, SCENE_FILTER
+
+    config = load_pipeline_config(args.config) if args.config else {}
+    DATA_ROOT = args.data_root or config_value(config, "paths", "raw_root", default=DATA_ROOT)
+    OUTPUT_ROOT = args.output_root or config_value(config, "paths", "synced_root", default=OUTPUT_ROOT)
+    JSON_FILE = args.sync_manifest or config_value(config, "paths", "sync_manifest", default=JSON_FILE)
+    START_DELAY = args.start_delay if args.start_delay is not None else float(config_value(config, "sync", "start_delay_seconds", default=START_DELAY))
+    FPS_NOMINAL = args.fps if args.fps is not None else float(config_value(config, "camera", "nominal_fps", default=FPS_NOMINAL))
+    NUM_WORKERS = args.workers if args.workers is not None else int(config_value(config, "sync", "workers", default=NUM_WORKERS))
+    FFMPEG_EXECUTABLE = args.ffmpeg or str(config_value(config, "tools", "ffmpeg", default=FFMPEG_EXECUTABLE))
+    FFPROBE_EXECUTABLE = args.ffprobe or str(config_value(config, "tools", "ffprobe", default=FFPROBE_EXECUTABLE))
+    SCENE_FILTER = args.scene
+
+
+def parse_args():
+    parser = argparse.ArgumentParser(description="Create synchronized MP4 clips from a sync manifest.")
+    parser.add_argument("--config", default=None, help="Optional RealDynLFV batch YAML config.")
+    parser.add_argument("--data-root", default=None)
+    parser.add_argument("--output-root", default=None)
+    parser.add_argument("--sync-manifest", default=None)
+    parser.add_argument("--start-delay", type=float, default=None)
+    parser.add_argument("--fps", type=float, default=None)
+    parser.add_argument("--workers", type=int, default=None)
+    parser.add_argument("--ffmpeg", default=None)
+    parser.add_argument("--ffprobe", default=None)
+    parser.add_argument("--scene", default=None, help="Optional single scene/video stem.")
+    return parser.parse_args()
+
+
+def init_worker_runtime(data_root, fps, ffmpeg_executable, ffprobe_executable):
+    """Propagate runtime overrides to Windows multiprocessing workers."""
+    global DATA_ROOT, FPS_NOMINAL, FFMPEG_EXECUTABLE, FFPROBE_EXECUTABLE
+    DATA_ROOT = data_root
+    FPS_NOMINAL = fps
+    FFMPEG_EXECUTABLE = ffmpeg_executable
+    FFPROBE_EXECUTABLE = ffprobe_executable
+
+
 def main():
     if not os.path.exists(JSON_FILE):
         print("未找到 sync_manifest.json！")
@@ -107,7 +161,7 @@ def main():
 
     # 检查 ffprobe
     try:
-        subprocess.run(['ffprobe', '-version'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        subprocess.run([FFPROBE_EXECUTABLE, '-version'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     except FileNotFoundError:
         print("[Error] 未找到 ffprobe，请安装 FFmpeg！")
         return
@@ -117,6 +171,8 @@ def main():
     
     # 遍历每一组视频 (例如 0001.mp4)
     for video_name, group_data in sync_data.items():
+        if SCENE_FILTER is not None and Path(video_name).stem != SCENE_FILTER:
+            continue
         print(f"\n>>> 分析组: {video_name}")
         
         master_time = group_data['master_clap_time']
@@ -167,10 +223,14 @@ def main():
         return
 
     # num_workers = min(12, os.cpu_count())
-    num_workers = 4  # 根据实际情况调整，过多可能导致磁盘过载
+    num_workers = NUM_WORKERS
     print(f"\n>>> 启动 {num_workers} 个进程处理 {len(all_tasks)} 个剪辑任务...")
     
-    with multiprocessing.Pool(num_workers) as pool:
+    with multiprocessing.Pool(
+        num_workers,
+        initializer=init_worker_runtime,
+        initargs=(DATA_ROOT, FPS_NOMINAL, FFMPEG_EXECUTABLE, FFPROBE_EXECUTABLE),
+    ) as pool:
         for res in pool.imap_unordered(process_single_video, all_tasks):
             print(res)
 
@@ -178,4 +238,5 @@ def main():
 
 if __name__ == "__main__":
     multiprocessing.freeze_support()
+    apply_runtime_config(parse_args())
     main()
