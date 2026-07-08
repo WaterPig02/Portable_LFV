@@ -30,3 +30,11 @@ Thumbs.db
 Calibration_Data/
 Exports/
 Output/
+
+# Local legacy and paper-working files not included in the pipeline release
+Code/legacy/Clip_5x5_By_Time.py
+bibtex_candidates_capture_pipeline.bib
+citation_check_capture_pipeline.md
+docs/Dataset_Construction_方法审查.md
+docs/paper_progress_summary.md
+docs/第一批数据全流程处理说明.md
