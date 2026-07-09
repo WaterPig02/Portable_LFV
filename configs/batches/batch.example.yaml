@@ -1,5 +1,5 @@
 project_name: RealDynLFV
-batch_name: firstsyn
+batch_id: sample_batch
 
 camera:
   reference: CAM_C3
@@ -9,22 +9,26 @@ camera:
   image_size: [3840, 2160]
 
 paths:
-  raw_root: D:/data/RealDynLFV/raw/firstsyn
-  synced_root: D:/data/RealDynLFV/synced/firstsyn
-  sync_manifest: D:/data/RealDynLFV/metadata/firstsyn/sync_manifest_firstsyn.json
-  calibration_json: D:/data/RealDynLFV/metadata/firstsyn/calibration_raw_stereo_locked_firstsyn.json
-  calibration_debug_dir: D:/data/RealDynLFV/metadata/firstsyn/calibration_debug
-  calibration_report_dir: D:/data/RealDynLFV/metadata/firstsyn/calibration_report
-  rectification_dir: D:/data/RealDynLFV/metadata/firstsyn/rectification
-  roi_metadata: D:/data/RealDynLFV/metadata/firstsyn/rectification/release_roi_metadata.json
-  time_segments: D:/data/RealDynLFV/configs/firstsyn_time.json
-  output_root: D:/data/RealDynLFV/exports/firstsyn
-  lut: D:/data/RealDynLFV/assets/dlogm_to_rec709.cube
+  raw_root: /path/to/realdynlfv/raw/sample_batch
+  synced_root: /path/to/realdynlfv/synced/sample_batch
+  sync_manifest: /path/to/realdynlfv/metadata/sample_batch/sync_manifest.json
+  calibration_json: /path/to/realdynlfv/metadata/sample_batch/calibration_raw_stereo_locked.json
+  calibration_debug_dir: /path/to/realdynlfv/metadata/sample_batch/calibration_debug
+  calibration_report_dir: /path/to/realdynlfv/metadata/sample_batch/calibration_report
+  rectification_dir: /path/to/realdynlfv/metadata/sample_batch/rectification
+  roi_metadata: /path/to/realdynlfv/metadata/sample_batch/rectification/release_roi_metadata.json
+  time_segments: /path/to/realdynlfv/configs/sample_batch_time.json
+  output_root: /path/to/realdynlfv/exports/sample_batch
+  lut: /path/to/realdynlfv/assets/dlogm_to_rec709.cube
 
 tools:
-  python: D:/anaconda3/envs/pytorch1/python.exe
+  python: python
   ffmpeg: ffmpeg
   ffprobe: ffprobe
+
+runtime:
+  time_key: sample_batch
+  shutdown_timeout_sec: 5
 
 sync:
   analyze_seconds: 10
@@ -39,6 +43,7 @@ calibration:
   square_size_mm: 25.0
   sample_start_seconds: 0.1
   sample_interval_seconds: 1.0
+  max_frames: 0
   workers: 4
 
 rectification:
@@ -47,9 +52,27 @@ rectification:
 
 roi:
   margin_px: 4
-  validation_scenes: ["0002", "0003", "0005"]
+  validation_scenes: ["0001"]
+  validation_frame_positions: [start, middle, end]
+  black_border_threshold: 0.01
+  near_black_threshold: 0.03
 
 export:
   default_profile: benchmark
+  default_scene: null
   workers: 4
   lut_hwaccel: cuda
+  benchmark:
+    jpeg_quality: 97
+    resize_target: [1920, 1080]
+    bit_depth: 8
+  fidelity:
+    png_bit_depth: 16
+    bit_depth: 16
+
+export_validation:
+  default_samples: 3
+  upgraded_samples: 9
+  black_border_fail_threshold: 0.01
+  near_black_warning_threshold: 0.03
+  enable_auto_upgrade: true

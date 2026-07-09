@@ -38,3 +38,6 @@ citation_check_capture_pipeline.md
 docs/Dataset_Construction_方法审查.md
 docs/paper_progress_summary.md
 docs/第一批数据全流程处理说明.md
+
+# Local pipeline configs with real data paths
+configs/batches/*.local.yaml

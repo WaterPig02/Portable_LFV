@@ -8,6 +8,10 @@ import numpy as np
 EXPORT_DIR = Path(__file__).resolve().parents[1] / "export"
 if str(EXPORT_DIR) not in sys.path:
     sys.path.insert(0, str(EXPORT_DIR))
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+SCRIPTS_DIR = PROJECT_ROOT / "scripts"
+if str(SCRIPTS_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPTS_DIR))
 
 from asset_versioning import (
     CROP_POLICY_VERSION,
@@ -18,6 +22,7 @@ from asset_versioning import (
     normalize_rectify_metadata,
 )
 from config import get_default_config
+from pipeline_config import config_value, load_pipeline_config
 
 
 ASPECT_WIDTH = 16
@@ -252,16 +257,24 @@ def build_roi_metadata(
 
 def main():
     pre_parser = argparse.ArgumentParser(add_help=False)
-    pre_parser.add_argument("--batch-name", default=None, choices=["secondsyn", "firstsyn"])
+    pre_parser.add_argument("--config", default=None)
+    pre_parser.add_argument("--batch-name", default=None)
     pre_args, _ = pre_parser.parse_known_args()
 
-    config = get_default_config(pre_args.batch_name)
-    default_rectify_dir = config["paths"].get("rectify_dir")
-    default_roi_output = config["paths"].get("roi_metadata")
-    default_margin = int(config["runtime"].get("roi_generation_margin_px", 4))
+    if pre_args.config:
+        config = load_pipeline_config(pre_args.config)
+        default_rectify_dir = config_value(config, "paths", "rectification_dir")
+        default_roi_output = config_value(config, "paths", "roi_metadata")
+        default_margin = int(config_value(config, "roi", "margin_px", default=4))
+    else:
+        config = get_default_config(pre_args.batch_name)
+        default_rectify_dir = config["paths"].get("rectify_dir")
+        default_roi_output = config["paths"].get("roi_metadata")
+        default_margin = int(config["runtime"].get("roi_generation_margin_px", 4))
 
     parser = argparse.ArgumentParser(description="Generate persistent ROI metadata for public export.")
-    parser.add_argument("--batch-name", default=pre_args.batch_name, choices=["secondsyn", "firstsyn"], help="Named batch config to use.")
+    parser.add_argument("--config", default=pre_args.config, help="Optional RealDynLFV batch YAML config.")
+    parser.add_argument("--batch-name", default=pre_args.batch_name, help="Legacy named batch config to use.")
     parser.add_argument("--rectify-dir", default=default_rectify_dir, help="Directory containing rectify_meta.json and map files.")
     parser.add_argument("--output", default=default_roi_output, help=f"Optional output path. Default: config path or <rectify-dir>/{ROI_METADATA_FILENAME}")
     parser.add_argument("--margin-px", type=int, default=default_margin, help="Safety margin in source-image pixels when computing valid masks.")

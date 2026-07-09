@@ -1,6 +1,7 @@
 import argparse
 import json
 import shutil
+import sys
 from datetime import datetime
 from pathlib import Path
 
@@ -9,10 +10,39 @@ import numpy as np
 
 from config import get_default_config
 
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+SCRIPTS_DIR = PROJECT_ROOT / "scripts"
+if str(SCRIPTS_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPTS_DIR))
+from pipeline_config import batch_id as pipeline_batch_id
+from pipeline_config import config_value as pipeline_config_value
+from pipeline_config import load_pipeline_config
+
 
 CAMERAS = [f"CAM_{row}{col}" for row in "ABCDE" for col in range(1, 6)]
 NEIGHBOR_CAMERAS = ["CAM_C2", "CAM_C4", "CAM_B3", "CAM_D3"]
 WIDE_BASELINE_CAMERAS = ["CAM_A1", "CAM_E5"]
+
+
+def apply_pipeline_config(config, pipeline_config_path):
+    pipeline = load_pipeline_config(pipeline_config_path)
+    output_root = pipeline_config_value(pipeline, "paths", "output_root")
+    if output_root is not None:
+        config["paths"]["output_root"] = str(output_root)
+    config["runtime"]["batch_name"] = pipeline_batch_id(pipeline)
+
+    validation_map = {
+        "export_validation_default_samples": ("export_validation", "default_samples", int),
+        "export_validation_upgraded_samples": ("export_validation", "upgraded_samples", int),
+        "export_validation_black_border_fail_threshold": ("export_validation", "black_border_fail_threshold", float),
+        "export_validation_near_black_warning_threshold": ("export_validation", "near_black_warning_threshold", float),
+        "export_validation_enable_auto_upgrade": ("export_validation", "enable_auto_upgrade", bool),
+    }
+    for target_key, (section, key, caster) in validation_map.items():
+        value = pipeline_config_value(pipeline, section, key)
+        if value is not None:
+            config["runtime"][target_key] = caster(value)
+    return config
 
 
 def load_json(path):
@@ -582,6 +612,7 @@ def iter_scene_dirs(profile_root, scene_name=None):
 
 def main():
     parser = argparse.ArgumentParser(description="检查导出结果，支持单场景检查与整批次全量检查，并在可疑时自动升级抽样。")
+    parser.add_argument("--config", default=None, help="Optional RealDynLFV batch YAML config.")
     parser.add_argument("--batch-name", default=None, choices=["secondsyn", "firstsyn"])
     parser.add_argument("--profile", required=True, choices=["benchmark", "fidelity"])
     parser.add_argument("--scene", default=None)
@@ -590,6 +621,8 @@ def main():
     args = parser.parse_args()
 
     config = get_default_config(args.batch_name)
+    if args.config:
+        config = apply_pipeline_config(config, args.config)
     output_root = Path(args.output_root or config["paths"]["output_root"])
     profile_root = output_root / args.profile
     logs_dir = output_root / "logs"

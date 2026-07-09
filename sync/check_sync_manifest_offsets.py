@@ -2,7 +2,14 @@
 import csv
 import json
 import statistics
+import sys
 from pathlib import Path
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+SCRIPTS_DIR = PROJECT_ROOT / "scripts"
+if str(SCRIPTS_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPTS_DIR))
+from pipeline_config import config_value, load_pipeline_config
 
 CAMERAS = [f"CAM_{row}{col}" for row in "ABCDE" for col in range(1, 6)]
 REFERENCE_CAMERA = "CAM_C3"
@@ -121,6 +128,7 @@ def write_csv(path, rows):
 
 def main():
     parser = argparse.ArgumentParser(description="检查 sync manifest 中异常 offset_ms。")
+    parser.add_argument("--config", default=None, help="Optional RealDynLFV batch YAML config.")
     parser.add_argument("--manifest", default=r"D:\Project\LF_dataset\Calibration\Calibration_Data\firstsyn\sync_manifest_firstsyn.json")
     parser.add_argument("--abs-warn-ms", type=float, default=300.0, help="绝对 offset 警告阈值。")
     parser.add_argument("--abs-fail-ms", type=float, default=600.0, help="绝对 offset 严重阈值。")
@@ -129,6 +137,9 @@ def main():
     parser.add_argument("--csv", default=None, help="可选 CSV 明细输出路径。")
     parser.add_argument("--top", type=int, default=40, help="终端显示最严重的前 N 条。")
     args = parser.parse_args()
+    if args.config:
+        config = load_pipeline_config(args.config)
+        args.manifest = config_value(config, "paths", "sync_manifest", default=args.manifest)
 
     data = load_manifest(args.manifest)
     rows, flagged, missing, camera_stats = analyze_manifest(

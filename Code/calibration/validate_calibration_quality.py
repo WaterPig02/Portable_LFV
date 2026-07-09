@@ -1,12 +1,18 @@
 ﻿import argparse
 import json
 import math
+import sys
 from pathlib import Path
 
 import cv2
 import numpy as np
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
+SCRIPTS_DIR = PROJECT_ROOT / "scripts"
+if str(SCRIPTS_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPTS_DIR))
+from pipeline_config import batch_id, config_value, load_pipeline_config
+
 REFERENCE_CAMERA = "CAM_C3"
 CHECKERBOARD_COLS = 8
 CHECKERBOARD_ROWS = 8
@@ -409,23 +415,52 @@ def write_text_report(path, report):
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Validate calibration quality and R_rel direction without modifying assets.")
-    parser.add_argument("--batch-name", choices=["firstsyn", "secondsyn"], required=True)
+    parser.add_argument("--config", default=None, help="Optional RealDynLFV batch YAML config.")
+    parser.add_argument("--batch-name", default=None, help="Legacy named batch default when --config is not provided.")
     parser.add_argument("--input-root", default=None)
     parser.add_argument("--calibration-json", default=None)
-    parser.add_argument("--target-video", default="0001.mp4")
+    parser.add_argument("--target-video", default=None)
     parser.add_argument("--output-dir", default=None)
-    parser.add_argument("--sample-interval", type=float, default=1.0)
-    parser.add_argument("--start-time", type=float, default=0.1)
-    parser.add_argument("--max-frames", type=int, default=0, help="0 means no cap")
+    parser.add_argument("--sample-interval", type=float, default=None)
+    parser.add_argument("--start-time", type=float, default=None)
+    parser.add_argument("--max-frames", type=int, default=None, help="0 means no cap")
     return parser.parse_args()
 
 
 def main():
+    global REFERENCE_CAMERA, CHECKERBOARD_COLS, CHECKERBOARD_ROWS, SQUARE_SIZE_MM, IMG_W, IMG_H
+
     args = parse_args()
-    defaults = DEFAULTS[args.batch_name]
-    input_root = Path(args.input_root) if args.input_root else defaults["input_root"]
-    calibration_json = Path(args.calibration_json) if args.calibration_json else defaults["calibration_json"]
-    output_dir = Path(args.output_dir) if args.output_dir else PROJECT_ROOT / "Output" / "Calibration_Reports" / args.batch_name
+    if args.config:
+        config = load_pipeline_config(args.config)
+        selected_batch = args.batch_name or batch_id(config)
+        corners = config_value(config, "calibration", "checkerboard_inner_corners", default=[CHECKERBOARD_COLS, CHECKERBOARD_ROWS])
+        image_size = config_value(config, "camera", "image_size", default=[IMG_W, IMG_H])
+        REFERENCE_CAMERA = str(config_value(config, "camera", "reference", default=REFERENCE_CAMERA))
+        CHECKERBOARD_COLS = int(corners[0])
+        CHECKERBOARD_ROWS = int(corners[1])
+        SQUARE_SIZE_MM = float(config_value(config, "calibration", "square_size_mm", default=SQUARE_SIZE_MM))
+        IMG_W = int(image_size[0])
+        IMG_H = int(image_size[1])
+        input_root = Path(args.input_root or config_value(config, "paths", "synced_root"))
+        calibration_json = Path(args.calibration_json or config_value(config, "paths", "calibration_json"))
+        output_dir = Path(args.output_dir or config_value(config, "paths", "calibration_report_dir", default=PROJECT_ROOT / "Output" / "Calibration_Reports" / selected_batch))
+        target_video = args.target_video or str(config_value(config, "calibration", "target_video", default="0001.mp4"))
+        sample_interval = args.sample_interval if args.sample_interval is not None else float(config_value(config, "calibration", "sample_interval_seconds", default=1.0))
+        start_time = args.start_time if args.start_time is not None else float(config_value(config, "calibration", "sample_start_seconds", default=0.1))
+        max_frames = args.max_frames if args.max_frames is not None else int(config_value(config, "calibration", "max_frames", default=0))
+    else:
+        if args.batch_name not in DEFAULTS:
+            raise SystemExit("--batch-name must be one of firstsyn/secondsyn when --config is not provided")
+        selected_batch = args.batch_name
+        defaults = DEFAULTS[selected_batch]
+        input_root = Path(args.input_root) if args.input_root else defaults["input_root"]
+        calibration_json = Path(args.calibration_json) if args.calibration_json else defaults["calibration_json"]
+        output_dir = Path(args.output_dir) if args.output_dir else PROJECT_ROOT / "Output" / "Calibration_Reports" / selected_batch
+        target_video = args.target_video or "0001.mp4"
+        sample_interval = args.sample_interval if args.sample_interval is not None else 1.0
+        start_time = args.start_time if args.start_time is not None else 0.1
+        max_frames = args.max_frames if args.max_frames is not None else 0
     debug_dir = output_dir / "debug_frames"
 
     ensure(input_root.exists(), f"input_root 不存在：{input_root}")
@@ -433,9 +468,9 @@ def main():
     calib = load_json(calibration_json)
     ensure(REFERENCE_CAMERA in calib, f"calibration json 缺少参考相机：{REFERENCE_CAMERA}")
 
-    master_video = find_video(input_root, REFERENCE_CAMERA, args.target_video)
-    ensure(master_video is not None, f"找不到参考相机视频：{REFERENCE_CAMERA}/{args.target_video}")
-    frame_indices, fps, total_frames = sample_frame_indices(master_video, args.start_time, args.sample_interval, args.max_frames)
+    master_video = find_video(input_root, REFERENCE_CAMERA, target_video)
+    ensure(master_video is not None, f"找不到参考相机视频：{REFERENCE_CAMERA}/{target_video}")
+    frame_indices, fps, total_frames = sample_frame_indices(master_video, start_time, sample_interval, max_frames)
     ensure(frame_indices, "没有可用采样帧")
 
     cap = cv2.VideoCapture(str(master_video))
@@ -451,7 +486,7 @@ def main():
     detections = {}
     image_sizes = {}
     for cam in sorted(calib.keys()):
-        video_path = find_video(input_root, cam, args.target_video)
+        video_path = find_video(input_root, cam, target_video)
         if video_path is None:
             detections[cam] = []
             continue
@@ -469,10 +504,10 @@ def main():
 
     report = {
         "schema_version": "calibration_quality_report_v1",
-        "batch_name": args.batch_name,
+        "batch_name": selected_batch,
         "input_root": str(input_root),
         "calibration_json": str(calibration_json),
-        "target_video": args.target_video,
+        "target_video": target_video,
         "checkerboard_config": {
             "cols": CHECKERBOARD_COLS,
             "rows": CHECKERBOARD_ROWS,
@@ -484,8 +519,8 @@ def main():
             "fps": fps,
             "total_frames": total_frames,
             "sampled_frame_count": len(frame_indices),
-            "sample_interval_sec": args.sample_interval,
-            "start_time_sec": args.start_time,
+            "sample_interval_sec": sample_interval,
+            "start_time_sec": start_time,
             "frame_indices": [int(v) for v in frame_indices],
         },
         "camera_detection_summary": detection_summary,

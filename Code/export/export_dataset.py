@@ -26,6 +26,14 @@ from config import get_default_config
 from export_metadata import build_sequence_metadata, build_view_metadata, write_json
 from export_profiles import get_export_profile
 
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+SCRIPTS_DIR = PROJECT_ROOT / "scripts"
+if str(SCRIPTS_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPTS_DIR))
+from pipeline_config import batch_id as pipeline_batch_id
+from pipeline_config import config_value as pipeline_config_value
+from pipeline_config import load_pipeline_config, time_key as pipeline_time_key
+
 
 # 某个视角目录下存在该文件，表示该 view 尚未完整导出。
 IN_PROGRESS_FILENAME = ".in_progress"
@@ -75,6 +83,52 @@ def load_json(path):
     """读取 UTF-8 JSON 文件。 / Load a UTF-8 JSON file."""
     with Path(path).open("r", encoding="utf-8") as handle:
         return json.load(handle)
+
+
+def apply_pipeline_config(config, pipeline_config_path):
+    """用 generic batch YAML 覆盖旧 exporter 默认配置。 / Overlay generic batch YAML onto exporter defaults."""
+    pipeline = load_pipeline_config(pipeline_config_path)
+    path_map = {
+        "input_root": ("paths", "synced_root"),
+        "sync_manifest": ("paths", "sync_manifest"),
+        "time_json": ("paths", "time_segments"),
+        "rectify_dir": ("paths", "rectification_dir"),
+        "roi_metadata": ("paths", "roi_metadata"),
+        "output_root": ("paths", "output_root"),
+        "lut_path": ("paths", "lut"),
+    }
+    for target_key, source_keys in path_map.items():
+        value = pipeline_config_value(pipeline, *source_keys)
+        if value is not None:
+            config["paths"][target_key] = str(value)
+
+    ffmpeg = pipeline_config_value(pipeline, "tools", "ffmpeg")
+    if ffmpeg is not None:
+        config["environment"]["ffmpeg_executable"] = str(ffmpeg)
+
+    config["runtime"]["batch_name"] = pipeline_batch_id(pipeline)
+    config["runtime"]["time_key"] = pipeline_time_key(pipeline)
+    if pipeline_config_value(pipeline, "export", "workers") is not None:
+        config["runtime"]["max_workers"] = int(pipeline_config_value(pipeline, "export", "workers"))
+    if pipeline_config_value(pipeline, "export", "lut_hwaccel") is not None:
+        config["runtime"]["ffmpeg_lut_hwaccel"] = str(pipeline_config_value(pipeline, "export", "lut_hwaccel"))
+    if pipeline_config_value(pipeline, "runtime", "shutdown_timeout_sec") is not None:
+        config["runtime"]["shutdown_timeout_sec"] = float(pipeline_config_value(pipeline, "runtime", "shutdown_timeout_sec"))
+
+    profile_map = {
+        ("benchmark", "jpeg_quality"): int,
+        ("benchmark", "resize_target"): list,
+        ("benchmark", "bit_depth"): int,
+        ("fidelity", "png_bit_depth"): int,
+        ("fidelity", "bit_depth"): int,
+    }
+    for (profile_name, key), caster in profile_map.items():
+        value = pipeline_config_value(pipeline, "export", profile_name, key)
+        if value is not None:
+            config["profiles"].setdefault(profile_name, {})[key] = caster(value)
+    if pipeline_config_value(pipeline, "export", "default_scene") is not None:
+        config["runtime"]["default_scene"] = str(pipeline_config_value(pipeline, "export", "default_scene"))
+    return config
 
 
 def load_time_config(path, time_key):
@@ -801,6 +855,7 @@ def main():
     """命令行入口，组织批次导出流程。 / CLI entry point for batch export orchestration."""
     # 主入口：解析配置、组织 scene/segment/camera 任务，并负责最终提交 metadata。
     parser = argparse.ArgumentParser(description="Unified benchmark/fidelity exporter from synchronized MP4 clips.")
+    parser.add_argument("--config", default=None, help="Optional RealDynLFV batch YAML config.")
     parser.add_argument("--batch-name", default=None, choices=["secondsyn", "firstsyn"], help="Named batch config to use.")
     parser.add_argument("--input-root", default=None, help="Root containing synchronized MP4 clips organized by camera.")
     parser.add_argument("--sync-manifest", default=None, help="Path to sync_manifest.json.")
@@ -817,6 +872,8 @@ def main():
     args = parser.parse_args()
 
     config = get_default_config(args.batch_name)
+    if args.config:
+        config = apply_pipeline_config(config, args.config)
     config_paths = config["paths"]
     config_environment = config["environment"]
     config_profiles = config["profiles"]

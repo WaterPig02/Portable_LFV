@@ -7,7 +7,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from pipeline_config import camera_ids, config_value, load_pipeline_config
+from pipeline_config import camera_ids, config_value, load_pipeline_config, time_key
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -204,11 +204,11 @@ def preflight_stage(config, stage, scene, profile):
 
     if stage in {"roi-qa", "export"}:
         time_data = load_json_checked(check, "paths.time_segments", paths.get("time_segments"))
-        batch_name = config_value(config, "batch_name")
-        if isinstance(time_data, dict) and batch_name not in time_data:
-            check.errors.append(f"time segments do not contain batch key: {batch_name}")
-        if scene and isinstance(time_data, dict) and scene not in time_data.get(batch_name, {}):
-            check.errors.append(f"scene {scene} is not present in time segments for {batch_name}")
+        selected_time_key = time_key(config)
+        if isinstance(time_data, dict) and selected_time_key not in time_data:
+            check.errors.append(f"time segments do not contain batch key: {selected_time_key}")
+        if scene and isinstance(time_data, dict) and scene not in time_data.get(selected_time_key, {}):
+            check.errors.append(f"scene {scene} is not present in time segments for {selected_time_key}")
 
     if stage == "export":
         check_camera_layout(check, config, "synced_root")
@@ -229,10 +229,8 @@ def build_command(config, stage, scene, profile):
     python = tool_path(config, "python", sys.executable)
     config_path = str(config["_config_path"])
     paths = config["paths"]
-    batch_name = str(config_value(config, "batch_name"))
-
     if stage == "sync-qa":
-        return [python, str(PROJECT_ROOT / "sync" / "check_sync_manifest_offsets.py"), "--manifest", paths["sync_manifest"]]
+        return [python, str(PROJECT_ROOT / "sync" / "check_sync_manifest_offsets.py"), "--config", config_path]
     if stage == "sync-clip":
         command = [python, str(PROJECT_ROOT / "sync" / "Batch_Clip_Engine.py"), "--config", config_path]
         if scene:
@@ -244,12 +242,9 @@ def build_command(config, stage, scene, profile):
             command.extend(["--target-video", f"{scene}.mp4"])
         return command
     if stage == "calibration-qa":
-        if batch_name not in {"firstsyn", "secondsyn"}:
-            raise NotImplementedError("calibration-qa currently requires batch_name firstsyn or secondsyn")
         command = [
             python, str(PROJECT_ROOT / "Code" / "calibration" / "validate_calibration_quality.py"),
-            "--batch-name", batch_name, "--input-root", paths["synced_root"],
-            "--calibration-json", paths["calibration_json"], "--output-dir", paths["calibration_report_dir"],
+            "--config", config_path,
         ]
         if scene:
             command.extend(["--target-video", f"{scene}.mp4"])
@@ -259,41 +254,28 @@ def build_command(config, stage, scene, profile):
     if stage == "roi":
         return [
             python, str(PROJECT_ROOT / "Code" / "prepare" / "generate_release_roi.py"),
-            "--rectify-dir", paths["rectification_dir"], "--output", paths["roi_metadata"],
-            "--margin-px", str(config_value(config, "roi", "margin_px", default=4)),
+            "--config", config_path,
         ]
     if stage == "roi-qa":
-        if batch_name not in {"firstsyn", "secondsyn"}:
-            raise NotImplementedError("roi-qa currently requires batch_name firstsyn or secondsyn")
         command = [
             python, str(PROJECT_ROOT / "Code" / "prepare" / "validate_release_roi.py"),
-            "--batch-name", batch_name, "--rectify-dir", paths["rectification_dir"],
-            "--roi-metadata", paths["roi_metadata"], "--input-root", paths["synced_root"],
-            "--time-json", paths["time_segments"], "--time-key", batch_name,
+            "--config", config_path,
         ]
         if scene:
             command.extend(["--scenes", scene])
         return command
     if stage == "export":
-        if batch_name not in {"firstsyn", "secondsyn"}:
-            raise NotImplementedError("export currently requires batch_name firstsyn or secondsyn")
         command = [
             python, str(PROJECT_ROOT / "Code" / "export" / "export_dataset.py"),
-            "--batch-name", batch_name, "--profile", profile,
-            "--input-root", paths["synced_root"], "--sync-manifest", paths["sync_manifest"],
-            "--time-json", paths["time_segments"], "--rectify-dir", paths["rectification_dir"],
-            "--roi-metadata", paths["roi_metadata"], "--output-root", paths["output_root"],
-            "--lut-path", paths["lut"], "--max-workers", str(config_value(config, "export", "workers", default=4)),
+            "--config", config_path, "--profile", profile,
         ]
         if scene:
             command.extend(["--scene", scene])
         return command
     if stage == "export-qa":
-        if batch_name not in {"firstsyn", "secondsyn"}:
-            raise NotImplementedError("export-qa currently requires batch_name firstsyn or secondsyn")
         command = [
             python, str(PROJECT_ROOT / "Code" / "export" / "validate_export.py"),
-            "--batch-name", batch_name, "--profile", profile, "--output-root", paths["output_root"],
+            "--config", config_path, "--profile", profile,
         ]
         if scene:
             command.extend(["--scene", scene])

@@ -10,9 +10,14 @@ import numpy as np
 EXPORT_DIR = Path(__file__).resolve().parents[1] / "export"
 if str(EXPORT_DIR) not in sys.path:
     sys.path.insert(0, str(EXPORT_DIR))
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+SCRIPTS_DIR = PROJECT_ROOT / "scripts"
+if str(SCRIPTS_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPTS_DIR))
 
 from asset_versioning import ROI_METADATA_FILENAME, compute_export_signature, normalize_rectify_metadata, normalize_roi_metadata
 from config import get_default_config
+from pipeline_config import batch_id, config_value, load_pipeline_config, time_key
 
 
 CAMERAS = [f"CAM_{row}{col}" for row in "ABCDE" for col in range(1, 6)]
@@ -288,7 +293,8 @@ def summarize_validation(worst_cameras, black_threshold, near_black_threshold):
 
 def main():
     parser = argparse.ArgumentParser(description="自动验证 release ROI 是否足够保守，并输出独立验证报告。")
-    parser.add_argument("--batch-name", default=None, choices=["secondsyn", "firstsyn"])
+    parser.add_argument("--config", default=None, help="Optional RealDynLFV batch YAML config.")
+    parser.add_argument("--batch-name", default=None)
     parser.add_argument("--rectify-dir", default=None)
     parser.add_argument("--roi-metadata", default=None)
     parser.add_argument("--input-root", default=None)
@@ -297,7 +303,29 @@ def main():
     parser.add_argument("--scenes", nargs="*", default=None)
     args = parser.parse_args()
 
-    config = get_default_config(args.batch_name)
+    if args.config:
+        pipeline_config = load_pipeline_config(args.config)
+        selected_batch = args.batch_name or batch_id(pipeline_config)
+        selected_time_key = args.time_key or time_key(pipeline_config)
+        config = {
+            "paths": {
+                "rectify_dir": config_value(pipeline_config, "paths", "rectification_dir"),
+                "roi_metadata": config_value(pipeline_config, "paths", "roi_metadata"),
+                "input_root": config_value(pipeline_config, "paths", "synced_root"),
+                "time_json": config_value(pipeline_config, "paths", "time_segments"),
+                "sync_manifest": config_value(pipeline_config, "paths", "sync_manifest"),
+            },
+            "runtime": {
+                "batch_name": selected_batch,
+                "time_key": selected_time_key,
+                "roi_validation_sample_scenes": config_value(pipeline_config, "roi", "validation_scenes", default=["*"]),
+                "roi_validation_frame_positions": config_value(pipeline_config, "roi", "validation_frame_positions", default=["start", "middle", "end"]),
+                "roi_black_border_threshold": config_value(pipeline_config, "roi", "black_border_threshold", default=0.01),
+                "roi_near_black_threshold": config_value(pipeline_config, "roi", "near_black_threshold", default=0.03),
+            },
+        }
+    else:
+        config = get_default_config(args.batch_name)
     rectify_dir_value = args.rectify_dir or config["paths"]["rectify_dir"]
     roi_metadata_value = args.roi_metadata or config["paths"]["roi_metadata"]
     input_root = args.input_root or config["paths"]["input_root"]
