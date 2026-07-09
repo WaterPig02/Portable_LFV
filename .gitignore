@@ -48,3 +48,4 @@ Code/time.json
 
 # User-provided LUT assets. This repository does not redistribute vendor LUTs.
 *.cube
+docs/
