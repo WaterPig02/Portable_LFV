@@ -57,7 +57,7 @@ Not included in v0:
 
 The current fidelity path is not documented as a formal true 16-bit release. The benchmark path is the current stable release target.
 
-Legacy scripts under `Code/legacy/` are retained for historical reference but are not part of the official pipeline v0.
+Legacy scripts are excluded from the public pipeline v0 and kept only as internal references under ignored local folders.
 
 ## Batch Configuration
 
