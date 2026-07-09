@@ -34,7 +34,37 @@ raw videos
 
 ## 3. 开始前准备
 
-### 3.1 数据准备
+### 3.1 环境准备
+
+建议使用独立 Python 环境。公开交接时不要依赖固定机器路径，接手者只需要保证下面这些工具可用：
+
+- Python 3.x。
+- FFmpeg 和 ffprobe，并且能在终端直接调用。
+- OpenCV，也就是 Python 包 `cv2`。
+- NumPy。
+- SciPy。
+- Matplotlib。
+- sounddevice，用于同步 GUI 中的音频播放。
+- tqdm。
+- PyYAML，用于读取 batch YAML 配置。
+- Pillow，用于部分 QA 图像检查。
+
+最小安装示例：
+
+```powershell
+pip install opencv-python numpy scipy matplotlib sounddevice tqdm PyYAML Pillow
+```
+
+FFmpeg 需要单独安装，并加入系统 `PATH`。检查方式：
+
+```powershell
+ffmpeg -version
+ffprobe -version
+```
+
+如果要运行 `sync-clip`，当前实现默认使用 FFmpeg/NVENC 路径。机器没有 NVIDIA GPU 或没有 NVENC 支持时，需要先调整配置或脚本参数，不要直接全量跑。
+
+### 3.2 数据准备
 
 新采集一批数据后，先整理好这些内容：
 
@@ -49,7 +79,42 @@ raw videos
 
 缺 25 views 的 scene 不适合作为正式 5x5 benchmark。可以保留作内部参考，但不要混进正式 benchmark 输出。
 
-### 3.2 配置准备
+### 3.3 视频命名规范
+
+新采集 batch 必须使用统一编号命名。规定从 `0001.mp4` 开始连续编号：
+
+```text
+0001.mp4
+0002.mp4
+0003.mp4
+...
+```
+
+25 个 camera 目录下，同一个 scene 的文件名必须一致。例如：
+
+```text
+CAM_A1/0001.mp4
+CAM_A2/0001.mp4
+...
+CAM_E5/0001.mp4
+```
+
+不要在同一个 batch 里混用 `take_001.mp4`、`scene1.mp4`、`0001.MP4` 这类不同风格。虽然部分脚本可以兼容 `.mp4` 和 `.MP4`，但交接规范统一使用小写 `.mp4`。
+
+同步 manifest 和 time segments 也要跟这个编号一致：
+
+```json
+{
+  "sample_batch": {
+    "0001": [[0.0, 1.0]],
+    "0002": [[2.5, 4.0]]
+  }
+}
+```
+
+这里的 `0001` 是 `0001.mp4` 去掉扩展名后的 scene id。
+
+### 3.4 配置准备
 
 复制一份本地 batch 配置：
 
@@ -94,6 +159,7 @@ calibration:
 
 - `camera.reference` 固定使用 `CAM_C3`。
 - `paths.lut` 指向本地 LUT 文件。仓库不分发 DJI `.cube` LUT。
+- 如果使用 DJI 官方 LUT，需要自行确认许可和下载来源。
 - `paths.time_segments` 指向自己的 JSON。可以从 `configs/time.example.json` 复制一份再改。
 - `calibration.target_video` 是同步后标定视频文件名，例如 `0001.mp4`。pipeline 不会自动帮你选择最佳标定视频。
 
@@ -306,6 +372,10 @@ output_root/
 ### 缺 25 views
 
 正式 5x5 benchmark 需要 25 个视角。缺 view 的 scene 不建议进入正式发布。
+
+### 视频编号不一致
+
+新 batch 统一使用从 `0001.mp4` 开始的连续编号。manifest、time segments 和 25 个 camera 目录下的文件名必须一致。
 
 ### LUT 缺失
 
