@@ -13,9 +13,9 @@ if str(SCRIPTS_DIR) not in sys.path:
 from pipeline_config import config_value, load_pipeline_config
 
 # ================= 配置区域 =================
-DATA_ROOT = r"D:\Project\LF_dataset\Data\01_Original_Data\2026-01-19_数据集第一批次拍摄"
-OUTPUT_ROOT = r"E:\5x5_LFV\1st_synced_output"
-JSON_FILE = r"D:\Project\LF_dataset\Calibration\Calibration_Data\firstsyn\sync_manifest_firstsyn.json"
+DATA_ROOT = str(PROJECT_ROOT / "data" / "raw" / "sample_batch")
+OUTPUT_ROOT = str(PROJECT_ROOT / "data" / "synced" / "sample_batch")
+JSON_FILE = str(PROJECT_ROOT / "metadata" / "sample_batch" / "sync_manifest.json")
 
 # 剪辑设置
 START_DELAY = 1.5    # 打板后延迟几秒开始剪 (避开手部动作)

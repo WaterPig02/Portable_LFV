@@ -856,7 +856,7 @@ def main():
     # 主入口：解析配置、组织 scene/segment/camera 任务，并负责最终提交 metadata。
     parser = argparse.ArgumentParser(description="Unified benchmark/fidelity exporter from synchronized MP4 clips.")
     parser.add_argument("--config", default=None, help="Optional RealDynLFV batch YAML config.")
-    parser.add_argument("--batch-name", default=None, choices=["secondsyn", "firstsyn"], help="Named batch config to use.")
+    parser.add_argument("--batch-name", default=None, help="Optional named default config. Public use should prefer --config.")
     parser.add_argument("--input-root", default=None, help="Root containing synchronized MP4 clips organized by camera.")
     parser.add_argument("--sync-manifest", default=None, help="Path to sync_manifest.json.")
     parser.add_argument("--time-json", default=None, help="Path to time.json containing selected synced segments.")

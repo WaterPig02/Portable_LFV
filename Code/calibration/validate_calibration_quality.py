@@ -20,13 +20,9 @@ SQUARE_SIZE_MM = 25.0
 IMG_W = 3840
 IMG_H = 2160
 DEFAULTS = {
-    "secondsyn": {
-        "input_root": Path(r"E:\5x5_LFV\2nd_synced_output"),
-        "calibration_json": PROJECT_ROOT / "Output" / "calibration_raw_stereo_locked_secondsyn.json",
-    },
-    "firstsyn": {
-        "input_root": Path(r"E:\5x5_LFV\1st_synced_output"),
-        "calibration_json": PROJECT_ROOT / "Output" / "calibration_raw_stereo_locked_firstsyn.json",
+    "sample_batch": {
+        "input_root": PROJECT_ROOT / "data" / "synced" / "sample_batch",
+        "calibration_json": PROJECT_ROOT / "metadata" / "sample_batch" / "calibration_raw_stereo_locked.json",
     },
 }
 
@@ -450,9 +446,9 @@ def main():
         start_time = args.start_time if args.start_time is not None else float(config_value(config, "calibration", "sample_start_seconds", default=0.1))
         max_frames = args.max_frames if args.max_frames is not None else int(config_value(config, "calibration", "max_frames", default=0))
     else:
-        if args.batch_name not in DEFAULTS:
-            raise SystemExit("--batch-name must be one of firstsyn/secondsyn when --config is not provided")
-        selected_batch = args.batch_name
+        selected_batch = args.batch_name or "sample_batch"
+        if selected_batch not in DEFAULTS:
+            raise SystemExit("unsupported --batch-name. Use --config with a local YAML file for real datasets.")
         defaults = DEFAULTS[selected_batch]
         input_root = Path(args.input_root) if args.input_root else defaults["input_root"]
         calibration_json = Path(args.calibration_json) if args.calibration_json else defaults["calibration_json"]

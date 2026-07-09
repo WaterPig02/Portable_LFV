@@ -15,9 +15,9 @@ if str(SCRIPTS_DIR) not in sys.path:
 from pipeline_config import config_value, load_pipeline_config
 
 # ================= 配置区域 =================
-CLIPPED_VIDEO_ROOT = r"E:\5x5_LFV\1st_synced_output"
-OUTPUT_JSON = r"D:\Project\LF_dataset\Calibration\Output\calibration_raw_stereo_locked_firstsyn.json"
-DEBUG_IMG_DIR = r"D:\Project\LF_dataset\Calibration\Output\Debug_Images_V7_Firstsyn"
+CLIPPED_VIDEO_ROOT = str(PROJECT_ROOT / "data" / "synced" / "sample_batch")
+OUTPUT_JSON = str(PROJECT_ROOT / "metadata" / "sample_batch" / "calibration_raw_stereo_locked.json")
+DEBUG_IMG_DIR = str(PROJECT_ROOT / "metadata" / "sample_batch" / "calibration_debug")
 
 # 标定板参数
 CHECKERBOARD_COLS = 8

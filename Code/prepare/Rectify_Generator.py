@@ -14,9 +14,9 @@ if str(SCRIPTS_DIR) not in sys.path:
 from pipeline_config import config_value, load_pipeline_config
 
 # ================= 配置区域 =================
-BATCH_NAME = "firstsyn"
-INPUT_JSON = rf"D:\Project\LF_dataset\Calibration\Output\calibration_raw_stereo_locked_{BATCH_NAME}.json"
-OUTPUT_MAP_DIR = rf"D:\Project\LF_dataset\Calibration\Output\Rectify_Maps\{BATCH_NAME}"
+BATCH_NAME = "sample_batch"
+INPUT_JSON = str(PROJECT_ROOT / "metadata" / BATCH_NAME / "calibration_raw_stereo_locked.json")
+OUTPUT_MAP_DIR = str(PROJECT_ROOT / "metadata" / BATCH_NAME / "rectification")
 MASTER_CAM = "CAM_C3"
 
 # 图像分辨率
@@ -58,11 +58,11 @@ def apply_runtime_config(args):
     BATCH_NAME = args.batch_name or str(config_value(config, "batch_name", default=BATCH_NAME))
     INPUT_JSON = args.calibration_json or config_value(
         config, "paths", "calibration_json",
-        default=rf"D:\Project\LF_dataset\Calibration\Output\calibration_raw_stereo_locked_{BATCH_NAME}.json",
+        default=INPUT_JSON,
     )
     OUTPUT_MAP_DIR = args.output_dir or config_value(
         config, "paths", "rectification_dir",
-        default=rf"D:\Project\LF_dataset\Calibration\Output\Rectify_Maps\{BATCH_NAME}",
+        default=OUTPUT_MAP_DIR,
     )
     MASTER_CAM = args.reference_camera or str(config_value(config, "camera", "reference", default=MASTER_CAM))
     IMG_W = args.image_width if args.image_width is not None else int(image_size[0])

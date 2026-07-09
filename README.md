@@ -83,7 +83,8 @@ The YAML config records:
 - calibration JSON and reports
 - rectification and ROI assets
 - selected time segments
-- output root and LUT
+- output root and user-provided LUT
+- selected time segment JSON (`paths.time_segments`)
 - 5x5 camera layout and `CAM_C3` reference camera
 - nominal FPS and image size
 - checkerboard parameters
@@ -139,7 +140,7 @@ Check benchmark outputs:
 python scripts/run_pipeline.py --config configs/batches/my_batch.local.yaml --stage export-qa --profile benchmark
 ```
 
-The underlying scripts can still be called directly. Calling them without arguments preserves their existing local defaults.
+The underlying scripts can still be called directly, but public use should pass `--config` or explicit paths. No-argument defaults are generic placeholders and are not intended for real datasets.
 
 ## Safety and Preflight
 
@@ -166,4 +167,6 @@ Real data, calibration results, exports, generated maps, and local configs remai
 - `Exports/`
 - `configs/batches/*.local.yaml`
 
-The LUT license and redistribution permission must be checked before publishing LUT assets with an open-source release.
+Time segment files are dataset-specific. Start from `configs/time.example.json`, then point `paths.time_segments` in your local YAML config to your own segment file.
+
+LUT files are user-provided assets. This repository does not redistribute DJI `.cube` LUT files. If you use an official DJI LUT, configure its local path in YAML and confirm the license and download source yourself.

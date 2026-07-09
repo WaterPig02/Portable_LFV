@@ -17,9 +17,11 @@ paths:
   calibration_report_dir: /path/to/realdynlfv/metadata/sample_batch/calibration_report
   rectification_dir: /path/to/realdynlfv/metadata/sample_batch/rectification
   roi_metadata: /path/to/realdynlfv/metadata/sample_batch/rectification/release_roi_metadata.json
+  # Copy configs/time.example.json and edit it for your own selected segments.
   time_segments: /path/to/realdynlfv/configs/sample_batch_time.json
   output_root: /path/to/realdynlfv/exports/sample_batch
-  lut: /path/to/realdynlfv/assets/dlogm_to_rec709.cube
+  # User-provided LUT path. This repository does not redistribute vendor .cube LUTs.
+  lut: /path/to/local/user_provided_lut.cube
 
 tools:
   python: python

@@ -129,7 +129,7 @@ def write_csv(path, rows):
 def main():
     parser = argparse.ArgumentParser(description="检查 sync manifest 中异常 offset_ms。")
     parser.add_argument("--config", default=None, help="Optional RealDynLFV batch YAML config.")
-    parser.add_argument("--manifest", default=r"D:\Project\LF_dataset\Calibration\Calibration_Data\firstsyn\sync_manifest_firstsyn.json")
+    parser.add_argument("--manifest", default=str(PROJECT_ROOT / "metadata" / "sample_batch" / "sync_manifest.json"))
     parser.add_argument("--abs-warn-ms", type=float, default=300.0, help="绝对 offset 警告阈值。")
     parser.add_argument("--abs-fail-ms", type=float, default=600.0, help="绝对 offset 严重阈值。")
     parser.add_argument("--scene-mad-k", type=float, default=6.0, help="同一场景内 robust z 离群阈值。")

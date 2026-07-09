@@ -613,7 +613,7 @@ def iter_scene_dirs(profile_root, scene_name=None):
 def main():
     parser = argparse.ArgumentParser(description="检查导出结果，支持单场景检查与整批次全量检查，并在可疑时自动升级抽样。")
     parser.add_argument("--config", default=None, help="Optional RealDynLFV batch YAML config.")
-    parser.add_argument("--batch-name", default=None, choices=["secondsyn", "firstsyn"])
+    parser.add_argument("--batch-name", default=None, help="Optional named default config. Public use should prefer --config.")
     parser.add_argument("--profile", required=True, choices=["benchmark", "fidelity"])
     parser.add_argument("--scene", default=None)
     parser.add_argument("--all-scenes", action="store_true", help="显式要求遍历当前 batch/profile 下的全部场景。")

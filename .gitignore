@@ -41,3 +41,10 @@ docs/第一批数据全流程处理说明.md
 
 # Local pipeline configs with real data paths
 configs/batches/*.local.yaml
+
+# Internal local notes and real batch segment files
+_internal/
+Code/time.json
+
+# User-provided LUT assets. This repository does not redistribute vendor LUTs.
+*.cube

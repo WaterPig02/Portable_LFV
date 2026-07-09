@@ -14,8 +14,8 @@ import sounddevice as sd
 
 # ================= 配置区域 =================
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-DATA_ROOT = Path(r"D:\Project\LF_dataset\Data\01_Original_Data\2026-01-19_数据集第一批次拍摄")
-OUTPUT_MANIFEST = PROJECT_ROOT / "Calibration_Data" / "firstsyn" / "sync_manifest_firstsyn.json"
+DATA_ROOT = PROJECT_ROOT / "data" / "raw" / "sample_batch"
+OUTPUT_MANIFEST = PROJECT_ROOT / "metadata" / "sample_batch" / "sync_manifest.json"
 MASTER_CAM = "CAM_C3"
 SAMPLE_RATE = 48000
 ANALYZE_SEC = 10
